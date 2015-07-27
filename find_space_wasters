@@ -1,0 +1,83 @@
+#! /usr/bin/perl -w
+
+######################################################
+#   Kerim Gueney, kgueney@informatiik.uni-koeln.de   #
+#     Universitaet zu Koeln, Copyright 2014          #
+######################################################
+#
+# A tool to find user files that are greater than a
+# certain size. Duplicates are prepended with a "D". 
+
+use strict;
+use Data::Dumper;
+use Getopt::Std;
+
+my $size;
+my @output;
+my %data = ();
+my %opts = ();
+
+# read options
+getopts( "s:", \%opts ) or &usage;
+
+if ($opts{s} and $opts{s} > 1) {
+  @output = `find /home/ -type f -size +$opts{s}k -print0 | xargs -0 -P 20 md5sum`;
+} elsif ($opts{s} and $opts{s} == 1) {
+  &usage;
+}  else {
+  @output = `find /home/ -type f -size +81920k -print0 | xargs -0 -P 20 md5sum`;
+}
+
+# Building the hash.
+foreach my $output (@output) {
+  chomp $output;
+  my ($md5, $filename) = split("\\s+", $output, 2);
+  my $username = (split("/", $filename))[2];
+  my $filesize = &size_in_mb((stat($filename))[7]);
+  my $hash_entry = "$filesize $filename";
+
+# Using md5 as the first-level key, because this way it is much easier to track
+# duplicate files per user.
+# if one uses the username as the first-level hash key, then one ends up listing
+# duplicate files from other users' home folders.
+  push(@{$data{$md5}{$username}}, $hash_entry);
+}
+# Writing the files. Each line gets appended. Files should be deleted after the
+# emails have been sent.
+foreach my $md5 (keys %data) {
+  foreach my $username (keys %{$data{$md5}}) {
+    if (! -e $username) {
+      open(FW,">$username");
+      print FW "";
+    }
+
+# Following lines could probably be optimized. Perhaps change %data to a hash of
+# hash of hashes, but then one would have to change the duplicate checking logic.
+    open(my $fh, '>>', $username) or die "Could not open file '$username' $!";
+    if (@{$data{$md5}{$username}} >= 2) {
+      foreach my $output (@{$data{$md5}{$username}}) {
+        my @tmp = split(" ", $output);
+        printf $fh "D  %-11s  %-11s\n", $tmp[0], $tmp[1];
+      }
+    } else {
+      foreach my $output (@{$data{$md5}{$username}}) {
+        my @tmp = split(" ", $output);
+        printf $fh "   %-11s  %-11s\n", $tmp[0], $tmp[1];
+      }
+    }
+  }
+}
+
+# Quick&Dirty size approximation
+sub size_in_mb {
+    my $size_in_kb = shift;
+    $size_in_kb = $size_in_kb /(1024 * 1024);
+    my $significant_digits = sprintf("%.2f", $size_in_kb);
+    return $significant_digits;
+}
+
+sub usage{
+  print "usage: command [-h] [-s size] [-u users]\n";
+  print "    -s size : minimum size of files that should be listed.\n";
+  exit;
+}
