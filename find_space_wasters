@@ -17,22 +17,35 @@ my @output;
 my %data = ();
 my %opts = ();
 
+
 # read options
-getopts( "s:", \%opts ) or &usage;
+getopts( "s:u:", \%opts ) or &usage;
 
-if ($opts{s} and $opts{s} > 1) {
-  @output = `find /home/ -type f -size +$opts{s}k -print0 | xargs -0 -P 20 md5sum`;
-} elsif ($opts{s} and $opts{s} == 1) {
-  &usage;
-}  else {
-  @output = `find /home/ -type f -size +81920k -print0 | xargs -0 -P 20 md5sum`;
+if ($opts{u}) {
+  if ($opts{s} and $opts{s} > 1) {
+    @output = `find /home/$opts{u}/ -type f -size +$opts{s}k -print0 | xargs -0 -P 20 md5sum`;
+  } elsif ($opts{s} and $opts{s} == 1) {
+    &usage;
+  }  else {
+    @output = `find /home/$opts{u}/ -type f -size +81920k -print0 | xargs -0 -P 20 md5sum`;
+  }
+} else {
+  if ($opts{s} and $opts{s} > 1) {
+    @output = `find /home/ -type f -size +$opts{s}k -print0 | xargs -0 -P 20 md5sum`;
+  } elsif ($opts{s} and $opts{s} == 1) {
+    &usage;
+  }  else {
+    @output = `find /home/ -type f -size +81920k -print0 | xargs -0 -P 20 md5sum`;
+  }
 }
-
 # Building the hash.
 foreach my $output (@output) {
   chomp $output;
   my ($md5, $filename) = split("\\s+", $output, 2);
   my $username = (split("/", $filename))[2];
+  if ($filename eq "-") {
+    next;
+  }
   my $filesize = &size_in_mb((stat($filename))[7]);
   my $hash_entry = "$filesize $filename";
 
